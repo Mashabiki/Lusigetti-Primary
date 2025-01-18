@@ -1097,8 +1097,6 @@ button {
   </div>
 </div>
 
-
-
 <div id="registerLearnerSection" style="max-width: 400px; margin: auto; display: none;">
     <h2>Register Learner</h2>
     <form id="learnerForm">
@@ -1110,10 +1108,14 @@ button {
         Parent Phone No: <input type="text" id="learnerPhone" required><br>
         Birth Certificate No: <input type="number" id="birthCertificate" required><br>
         Admission Number: <input type="text" id="admissionNumber" required><br>
- Photo: <input type="file" id="learnerPhoto" accept="image/*"><br>
+        Photo: <input type="file" id="learnerPhoto" accept="image/*"><br>
+        <!-- New Optional Fields -->
+        Category: <input type="text" id="learnerCategory" placeholder="Enter Category"><br>
+        Level: <input type="text" id="learnerLevel" placeholder="Enter Level"><br>
         <button type="submit">Add Learner</button>
     </form>
 </div>
+
 
     </div>
 <div id="fireworks-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1000;"></div>
@@ -1142,6 +1144,9 @@ button {
   <button onclick="printGroupedByGender()" class="neon-button">
     <i class="fas fa-print"></i> Print Grouped by Gender
   </button>
+<button id="groupBySNEButton" class="neon-button">
+    <i class="fas fa-users"></i> Group SNE by Grade
+</button>
 </div>
 </div>
 
@@ -1160,6 +1165,9 @@ button {
                         <th>Parent Phone No</th>
                         <th>Birth Certificate No</th>
                         <th>Admission Number</th>
+                         <th>Category</th> <!-- New Column -->
+           
+                         <th>Level</th> <!-- New Column -->
                      <th>Edit</th>
                 </tr>
             </thead>
@@ -1193,10 +1201,7 @@ button {
             Religious Education: <input type="number" id="religion" required><br>
             Creative Art: <input type="number" id="art" required><br>
         </div>
-      <button type="submit" style="display: flex; align-items: center; gap: 5px; padding: 10px 15px; background-color: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer;">
-    <i class="fas fa-paper-plane"></i> Submit Marks
-</button>
-
+        <button type="submit">Submit Marks</button>
     </form>
 </div>
 <!-- Success Message -->
@@ -1600,6 +1605,8 @@ button {
 <div id="savedTablesContainer"></div>
 </div> 
 
+<div id="groupedLearners"></div>
+
     <!-- Footer Section -->
     <footer id="footer" style="display: none; background-color: #2196F3; color: white; padding: 5px 0; text-align: center;">
         <p>&copy; 2025 Lusigetti Primary  School| All Rights Reserved</p>
@@ -1659,18 +1666,21 @@ button {
     };
 
     // Initialize IndexedDB if it doesn't exist
-    request.onupgradeneeded = function(event) {
-        const db = event.target.result;
-        const objectStore = db.createObjectStore("learners", { keyPath: "admissionNumber" });
-        objectStore.createIndex("admissionNumber", "admissionNumber", { unique: true });
-    };
+request.onupgradeneeded = function (event) {
+    const db = event.target.result;
+    const objectStore = db.createObjectStore("learners", { keyPath: "admissionNumber" });
+    objectStore.createIndex("admissionNumber", "admissionNumber", { unique: true });
+    objectStore.createIndex("name", "name", { unique: false });
+    objectStore.createIndex("category", "category", { unique: false }); // New field
+    objectStore.createIndex("level", "level", { unique: false }); // New field
+};
 
-    document.getElementById("learnerForm").addEventListener("submit", function (e) {
-        e.preventDefault();
+document.getElementById("learnerForm").addEventListener("submit", function (e) {
+    e.preventDefault();
 
-        // Capture learner details
-        const photoFile = document.getElementById("learnerPhoto").files[0];
-        const learner = {
+    // Capture learner details
+    const photoFile = document.getElementById("learnerPhoto").files[0];
+    const learner = {
         name: document.getElementById("learnerName").value,
         gender: document.getElementById("learnerGender").value,
         grade: document.getElementById("learnerGrade").value,
@@ -1679,106 +1689,76 @@ button {
         phone: document.getElementById("learnerPhone").value,
         birthCertificateNo: document.getElementById("birthCertificate").value,
         admissionNumber: document.getElementById("admissionNumber").value,
+        category: document.getElementById("learnerCategory").value || null, // Optional field
+        level: document.getElementById("learnerLevel").value || null, // Optional field
         photo: null, // Placeholder for the photo
     };
 
-
-        // Check for duplicate admission number
-        if (isDuplicateLearner(learner)) {
-            alert("Learner with this admission number already exists.");
-            return;
-        }
-
-        // If a photo is uploaded, convert it to Base64
-        if (photoFile) {
-            const reader = new FileReader();
-            reader.onload = function(event) {
-                learner.photo = event.target.result; // Store the Base64 string of the photo
-
-                // Open IndexedDB to store the new learner
-                const request = indexedDB.open("LearnersDB", 1);
-                
-                request.onsuccess = function(event) {
-                    const db = event.target.result;
-                    const transaction = db.transaction(["learners"], "readwrite");
-                    const objectStore = transaction.objectStore("learners");
-
-                    // Add the new learner to the IndexedDB
-                    const addRequest = objectStore.add(learner);
-
-                    addRequest.onsuccess = function() {
-                        learners.push(learner); // Add learner to the local array
-                        updateLearnersTable();
-                        updateLearnerSelect();
-                        document.getElementById("learnerForm").reset();
-
-                        // Display success message
-                        const successMessage = document.createElement("div");
-                        successMessage.textContent = "Learner registered successfully!";
-                        successMessage.style.color = "green";
-                        successMessage.style.fontWeight = "bold";
-                        successMessage.style.marginTop = "10px";
-
-                        const formContainer = document.getElementById("registerLearnerSection");
-                        formContainer.appendChild(successMessage);
-                        setTimeout(() => successMessage.remove(), 3000);
-                    };
-
-                    addRequest.onerror = function(event) {
-                        console.error("Error adding learner:", event.target.error);
-                    };
-                };
-
-                request.onerror = function(event) {
-                    console.error("Error opening IndexedDB:", event.target.error);
-                };
-            };
-            reader.readAsDataURL(photoFile); // Convert photo to Base64
-        } else {
-            // If no photo, proceed with learner registration
-            const request = indexedDB.open("LearnersDB", 1);
-
-            request.onsuccess = function(event) {
-                const db = event.target.result;
-                const transaction = db.transaction(["learners"], "readwrite");
-                const objectStore = transaction.objectStore("learners");
-
-                // Add the new learner to the IndexedDB without photo
-                const addRequest = objectStore.add(learner);
-
-                addRequest.onsuccess = function() {
-                    learners.push(learner); // Add learner to the local array
-                    updateLearnersTable();
-                    updateLearnerSelect();
-                    document.getElementById("learnerForm").reset();
-
-                    // Display success message
-                    const successMessage = document.createElement("div");
-                    successMessage.textContent = "Learner registered successfully!";
-                    successMessage.style.color = "green";
-                    successMessage.style.fontWeight = "bold";
-                    successMessage.style.marginTop = "10px";
-
-                    const formContainer = document.getElementById("registerLearnerSection");
-                    formContainer.appendChild(successMessage);
-                    setTimeout(() => successMessage.remove(), 3000);
-                };
-
-                addRequest.onerror = function(event) {
-                    console.error("Error adding learner:", event.target.error);
-                };
-            };
-
-            request.onerror = function(event) {
-                console.error("Error opening IndexedDB:", event.target.error);
-            };
-        }
-    });
-
-    // Helper function to check for duplicates
-    function isDuplicateLearner(learner) {
-        return learners.some(l => l.admissionNumber === learner.admissionNumber);
+    // Check for duplicate admission number
+    if (isDuplicateLearner(learner)) {
+        alert("Learner with this admission number already exists.");
+        return;
     }
+
+    // If a photo is uploaded, convert it to Base64
+    if (photoFile) {
+        const reader = new FileReader();
+        reader.onload = function (event) {
+            learner.photo = event.target.result; // Store the Base64 string of the photo
+
+            saveLearner(learner);
+        };
+        reader.readAsDataURL(photoFile); // Convert photo to Base64
+    } else {
+        saveLearner(learner); // Save without photo
+    }
+});
+
+// Helper function to save learner to IndexedDB
+function saveLearner(learner) {
+    const request = indexedDB.open("LearnersDB", 1);
+
+    request.onsuccess = function (event) {
+        const db = event.target.result;
+        const transaction = db.transaction(["learners"], "readwrite");
+        const objectStore = transaction.objectStore("learners");
+
+        // Add the new learner to the IndexedDB
+        const addRequest = objectStore.add(learner);
+
+        addRequest.onsuccess = function () {
+            learners.push(learner); // Add learner to the local array
+            updateLearnersTable();
+            updateLearnerSelect();
+            document.getElementById("learnerForm").reset();
+
+            // Display success message
+            const successMessage = document.createElement("div");
+            successMessage.textContent = "Learner registered successfully!";
+            successMessage.style.color = "green";
+            successMessage.style.fontWeight = "bold";
+            successMessage.style.marginTop = "10px";
+
+            const formContainer = document.getElementById("registerLearnerSection");
+            formContainer.appendChild(successMessage);
+            setTimeout(() => successMessage.remove(), 3000);
+        };
+
+        addRequest.onerror = function (event) {
+            console.error("Error adding learner:", event.target.error);
+        };
+    };
+
+    request.onerror = function (event) {
+        console.error("Error opening IndexedDB:", event.target.error);
+    };
+}
+
+// Helper function to check for duplicates
+function isDuplicateLearner(learner) {
+    return learners.some((l) => l.admissionNumber === learner.admissionNumber);
+}
+
 
    // Function to update the learners table
 function updateLearnersTable() {
@@ -1795,38 +1775,54 @@ function updateLearnersTable() {
             <td>${learner.phone}</td>
             <td>${learner.birthCertificateNo}</td>
             <td>${learner.admissionNumber}</td>
+            <td>${learner.category || "N/A"}</td> <!-- Display Category -->
+            <td>${learner.level || "N/A"}</td> <!-- Display Level -->
             <td><img src="${learner.photo}" alt="photo" style="width: 50px; height: 50px;" /></td>
         `;
         learnersList.appendChild(row);
     });
 }
-    // Function to update learner select options
-    function updateLearnerSelect() {
-        learnerSelect.innerHTML = "";
-        learners.forEach(learner => {
-            const option = document.createElement("option");
-            option.value = learner.admissionNumber;
-            option.textContent = learner.name;
-            learnerSelect.appendChild(option);
-        });
-    }
 
-    // Function to update bulk grade select options
-    function updateBulkGradeSelect() {
-        bulkGradeSelect.innerHTML = "";
-        const grades = [...new Set(learners.map(learner => learner.grade))];
-        grades.forEach(grade => {
+// Function to update learner select options
+function updateLearnerSelect() {
+    learnerSelect.innerHTML = "";
+    learners.forEach(learner => {
+        const option = document.createElement("option");
+        option.value = learner.admissionNumber;
+        option.textContent = `${learner.name} (${learner.category || "No Category"})`;
+        learnerSelect.appendChild(option);
+    });
+}
+
+// Function to update bulk grade select options
+function updateBulkGradeSelect() {
+    bulkGradeSelect.innerHTML = "";
+    const grades = [...new Set(learners.map(learner => learner.grade))];
+    grades.forEach(grade => {
+        const option = document.createElement("option");
+        option.value = grade;
+        option.textContent = grade;
+        bulkGradeSelect.appendChild(option);
+    });
+
+    // Optionally include levels if needed
+    const levels = [...new Set(learners.map(learner => learner.level))];
+    levels.forEach(level => {
+        if (level) {
             const option = document.createElement("option");
-            option.value = grade;
-            option.textContent = grade;
+            option.value = level;
+            option.textContent = `Level: ${level}`;
             bulkGradeSelect.appendChild(option);
-        });
-    }
+        }
+    });
+}
 
-    // Function to populate learner suggestions (if needed)
-    function populateLearnerSuggestions() {
-        // Implement any suggestions logic if required
-    } 
+// Function to populate learner suggestions (if needed)
+function populateLearnerSuggestions() {
+    // Implement any suggestions logic if required
+    // Could use the category or level for additional filters
+}
+
           // Hardcoded credentials (for demonstration purposes)
         const validUsername = "Lusigetti254";
         const validPassword = "Nm643PpQ@";
@@ -3627,14 +3623,14 @@ function printAssessmentReport() {
     printWindow.document.close();
     printWindow.print();
 }
-        function printRegisteredLearners() {
+  function printRegisteredLearners() { 
     // Retrieve input values from the form
     const schoolName = document.getElementById("schoolName").value || "School Name";
     const year = document.getElementById("year").value || "Year";
     const term = document.getElementById("term").value || "Term";
 
     // URL or base64 string of your logo
-    const logoUrl = " https://i.imgur.com/UW65hfv.png"; // Replace with your logo's URL or base64 string
+    const logoUrl = "https://i.imgur.com/UW65hfv.png"; // Replace with your logo's URL or base64 string
 
     // Generate the table content for registered learners
     const tableHtml = `
@@ -3643,14 +3639,16 @@ function printAssessmentReport() {
                 <tr>
                     <th>No.</th>
                     <th>Photo</th>
-                        <th>Name</th>
-                        <th>Gender</th>
-                        <th>Grade</th>
-                        <th>Age</th>
-                       <th>Parent Name</th>
-                        <th>Parent Phone No</th>
-                        <th>Birth Certificate No</th>
-                        <th>Admission Number</th>
+                    <th>Name</th>
+                    <th>Gender</th>
+                    <th>Grade</th>
+                    <th>Age</th>
+                    <th>Parent Name</th>
+                    <th>Parent Phone No</th>
+                    <th>Birth Certificate No</th>
+                    <th>Admission Number</th>
+                    <th>Category</th> <!-- New Column -->
+                    <th>Level</th> <!-- New Column -->
                 </tr>
             </thead>
             <tbody>
@@ -3658,14 +3656,16 @@ function printAssessmentReport() {
                     <tr>
                         <td>${index + 1}</td>
                         <td><img src="${learner.photo}" alt="Photo" width="50" height="50"></td>
-                       <td>${learner.name}</td>
-<td>${learner.gender}</td>
-<td>${learner.grade}</td>
-<td>${learner.age}</td>
-<td>${learner.parentName}</td>
-<td>${learner.phone}</td>
-<td>${learner.birthCertificateNo}</td>
-<td>${learner.admissionNumber}</td>
+                        <td>${learner.name}</td>
+                        <td>${learner.gender}</td>
+                        <td>${learner.grade}</td>
+                        <td>${learner.age}</td>
+                        <td>${learner.parentName}</td>
+                        <td>${learner.phone}</td>
+                        <td>${learner.birthCertificateNo}</td>
+                        <td>${learner.admissionNumber}</td>
+                        <td>${learner.category || "N/A"}</td> <!-- Display Category -->
+                        <td>${learner.level || "N/A"}</td> <!-- Display Level -->
                     </tr>
                 `).join('')}
             </tbody>
@@ -3706,6 +3706,7 @@ function printAssessmentReport() {
     printWindow.document.close();
     printWindow.print();
 }
+
 
 function printMarksTable() { 
     showLoadingSpinner(); // Show spinner while processing
@@ -4783,7 +4784,7 @@ function updateLearnersTable() {
     const learnersList = document.getElementById("learnersList");
     learnersList.innerHTML = learners.map((learner, index) => `
         <tr>
-          <td>${index + 1}</td> <!-- Serial Number -->
+            <td>${index + 1}</td> <!-- Serial Number -->
             <td><img src="${learner.photo}" alt="Photo" width="50" height="50"></td>
             <td contenteditable="true">${learner.name}</td>
             <td contenteditable="true">${learner.gender}</td>
@@ -4793,12 +4794,12 @@ function updateLearnersTable() {
             <td contenteditable="true">${learner.phone}</td>
             <td contenteditable="true">${learner.birthCertificateNo}</td>
             <td contenteditable="true">${learner.admissionNumber}</td>
+            <td contenteditable="true">${learner.category || "N/A"}</td> <!-- Editable Category -->
+            <td contenteditable="true">${learner.level || "N/A"}</td> <!-- Editable Level -->
             <td><button onclick="confirmDeleteLearner(${index})">Remove</button></td>
         </tr>
     `).join("");
 }
-
-
 document.getElementById("marksForm").addEventListener("submit", function (e) {
     e.preventDefault();
 
@@ -4848,7 +4849,7 @@ document.getElementById("marksForm").addEventListener("submit", function (e) {
 });
 function promoteLearners() {
     console.log("Starting promotion process...");
-    
+
     // Check if learners data exists
     if (!learners || learners.length === 0) {
         console.error("Learners data is not available.");
@@ -4859,17 +4860,19 @@ function promoteLearners() {
     // Iterate through learners and promote eligible ones
     learners.forEach((learner, index) => {
         console.log(`Processing learner: ${learner.name}, Grade: ${learner.grade}`);
-        const gradeMatch = learner.grade.match(/^(\d+)([A-Z]*)$/);
+        const gradeMatch = learner.grade.match(/^(\d+)([A-Z]*)$/); // Match grades like "4A", "7B", etc.
         if (gradeMatch) {
-            const currentGrade = parseInt(gradeMatch[1]);
-            const stream = gradeMatch[2];
+            const currentGrade = parseInt(gradeMatch[1]); // Extract the numeric grade
+            const stream = gradeMatch[2]; // Extract the stream (if any)
             console.log(`Current Grade: ${currentGrade}, Stream: ${stream}`);
             
-            // Promote learners in grades 4, 5, and 6
-            if (currentGrade >= 4 && currentGrade <= 6) {
-                const newGrade = (currentGrade + 1) + stream;
+            // Promote learners in Grades 1 to 12
+            if (currentGrade >= 1 && currentGrade < 12) { // Promote up to Grade 11
+                const newGrade = (currentGrade + 1) + stream; // Increment the grade, retain the stream
                 learner.grade = newGrade;
                 console.log(`Promoted to: ${learner.grade}`);
+            } else if (currentGrade === 12) {
+                console.warn(`Learner ${learner.name} is already in Grade 12 and cannot be promoted.`);
             }
         } else {
             console.warn(`Grade format not recognized for learner: ${learner.name}`);
@@ -4895,6 +4898,7 @@ function promoteLearners() {
         alert("Eligible learners have been promoted to the next grade!");
     }
 }
+
 
 // Helper to detect storage type
 const useIndexedDB = window.indexedDB ? true : false;
@@ -4936,8 +4940,7 @@ function saveLearnersToLocalStorage() {
 }
 
 
-
-function groupLearnersByGender() {
+function groupLearnersByGender() { 
     const groupedByGender = learners.reduce((groups, learner) => {
         if (!groups[learner.gender]) {
             groups[learner.gender] = [];
@@ -4959,26 +4962,29 @@ function groupLearnersByGender() {
                         <th>Gender</th>
                         <th>Grade</th>
                         <th>Age</th>
-                       <th>Parent Name</th>
+                        <th>Parent Name</th>
                         <th>Parent Phone No</th>
                         <th>Birth Certificate No</th>
                         <th>Admission Number</th>
+                        <th>Category</th> <!-- New Column -->
+                        <th>Level</th> <!-- New Column -->
                     </tr>
                 </thead>
                 <tbody>
                     ${groupedByGender[gender].map((learner, index) => `
                         <tr>
                             <td>${index + 1}</td> 
-<td><img src="${learner.photo}" alt="Photo" width="50" height="50"></td>
-<td>${learner.name}</td>
-<td>${learner.gender}</td>
-<td>${learner.grade}</td>
-<td>${learner.age}</td>
-<td>${learner.parentName}</td>
-<td>${learner.phone}</td>
-<td>${learner.birthCertificateNo}</td>
-<td>${learner.admissionNumber}</td>
-
+                            <td><img src="${learner.photo}" alt="Photo" width="50" height="50"></td>
+                            <td>${learner.name}</td>
+                            <td>${learner.gender}</td>
+                            <td>${learner.grade}</td>
+                            <td>${learner.age}</td>
+                            <td>${learner.parentName}</td>
+                            <td>${learner.phone}</td>
+                            <td>${learner.birthCertificateNo}</td>
+                            <td>${learner.admissionNumber}</td>
+                            <td>${learner.category || "N/A"}</td> <!-- Display Category -->
+                            <td>${learner.level || "N/A"}</td> <!-- Display Level -->
                         </tr>
                     `).join('')}
                 </tbody>
@@ -4995,7 +5001,8 @@ function groupLearnersByGender() {
         genderGroupMessage.style.display = "none";
     }, 3000);
 }
-function groupLearnersByGrade() {
+
+function groupLearnersByGrade() { 
     const groupedLearners = learners.reduce((groups, learner) => {
         if (!groups[learner.grade]) {
             groups[learner.grade] = [];
@@ -5013,16 +5020,18 @@ function groupLearnersByGrade() {
             <table class="learners-table" id="groupedTable-${grade}">
                 <thead>
                     <tr>
-                       <th>No.</th>
+                        <th>No.</th>
                         <th>Photo</th>
                         <th>Name</th>
                         <th>Gender</th>
                         <th>Grade</th>
                         <th>Age</th>
-                       <th>Parent Name</th>
+                        <th>Parent Name</th>
                         <th>Parent Phone No</th>
                         <th>Birth Certificate No</th>
                         <th>Admission Number</th>
+                        <th>Category</th> <!-- New Column -->
+                        <th>Level</th> <!-- New Column -->
                     </tr>
                 </thead>
                 <tbody>
@@ -5030,14 +5039,16 @@ function groupLearnersByGrade() {
                         <tr>
                             <td>${index + 1}</td>
                             <td><img src="${learner.photo}" alt="Photo" width="50" height="50"></td>
-                           <td>${learner.name}</td>
-<td>${learner.gender}</td>
-<td>${learner.grade}</td>
-<td>${learner.age}</td>
-<td>${learner.parentName}</td>
-<td>${learner.phone}</td>
-<td>${learner.birthCertificateNo}</td>
-<td>${learner.admissionNumber}</td>
+                            <td>${learner.name}</td>
+                            <td>${learner.gender}</td>
+                            <td>${learner.grade}</td>
+                            <td>${learner.age}</td>
+                            <td>${learner.parentName}</td>
+                            <td>${learner.phone}</td>
+                            <td>${learner.birthCertificateNo}</td>
+                            <td>${learner.admissionNumber}</td>
+                            <td>${learner.category || "N/A"}</td> <!-- Display Category -->
+                            <td>${learner.level || "N/A"}</td> <!-- Display Level -->
                         </tr>
                     `).join('')}
                 </tbody>
@@ -5054,6 +5065,7 @@ function groupLearnersByGrade() {
         gradeGroupMessage.style.display = "none";
     }, 3000);
 }
+
 function showAlert(message, type = 'success') {
     // Create the alert element
     const alertDiv = document.createElement('div');
@@ -6412,6 +6424,114 @@ document.addEventListener('DOMContentLoaded', checkStorageCapacity);
     // Run lazy loading for hidden sections
     document.addEventListener('DOMContentLoaded', lazyLoadSections);
 
+function groupLearnersBySNE() {  
+    const sneLearners = learners.filter(learner => learner.category === 'SNE');
+    const groupedByGrade = sneLearners.reduce((groups, learner) => {
+        const grade = learner.grade || 'Unknown Grade';
+        if (!groups[grade]) groups[grade] = [];
+        groups[grade].push(learner);
+        return groups;
+    }, {});
+
+    const groupedLearnersDiv = document.getElementById('groupedLearners');
+    groupedLearnersDiv.innerHTML = ''; // Clear the current content
+
+    Object.entries(groupedByGrade).forEach(([grade, learners]) => {
+        const gradeSection = document.createElement('div');
+        gradeSection.innerHTML = `
+            <h3>Grade ${grade}</h3>
+            <p><strong>School Name:</strong> Lusigetti Primary School</p>
+            <p><strong>Year:</strong> 2025</p>
+            <p><strong>Term:</strong> 1</p>
+            <button class="neon-button btn-print" onclick="printTable('group-${grade}')">
+                <i class="fas fa-print"></i> Print Grade ${grade}
+            </button>
+        `;
+
+        const table = document.createElement('table');
+        table.className = 'learners-table';
+        table.id = `group-${grade}`; // Assign a unique ID to the table
+
+        table.innerHTML = `
+            <thead>
+                <tr>
+                    <th>No.</th>
+                    <th>Name</th>
+                    <th>Gender</th>
+                    <th>Age</th>
+                    <th>Level</th>
+                    <th>Category</th>
+                    <th>Parent Name</th>
+                    <th>Phone</th>
+                    <th>Birth Certificate No</th>
+                    <th>Admission No</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${learners.map((learner, index) => `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td>${learner.name}</td>
+                        <td>${learner.gender}</td>
+                        <td>${learner.age}</td>
+                        <td>${learner.level || "N/A"}</td>
+                        <td>${learner.category || "N/A"}</td>
+                        <td>${learner.parentName}</td>
+                        <td>${learner.phone}</td>
+                        <td>${learner.birthCertificateNo}</td>
+                        <td>${learner.admissionNumber}</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        `;
+        gradeSection.appendChild(table);
+        groupedLearnersDiv.appendChild(gradeSection);
+    });
+}
+
+function printTable(tableId) {
+    const tableContent = document.getElementById(tableId).outerHTML;
+    const grade = tableId.split('-')[1]; // Extract the grade from the table ID
+    const printWindow = window.open('', '', 'width=800,height=600');
+    printWindow.document.write(`
+        <html>
+            <head>
+                <title>Print Table</title>
+                <style>
+                    table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        margin: 20px 0;
+                    }
+                    th, td {
+                        border: 1px solid #000;
+                        padding: 8px;
+                        text-align: center;
+                    }
+                    th {
+                        background-color: #f2f2f2;
+                    }
+                    h3, p {
+                        text-align: center;
+                        margin: 5px 0;
+                    }
+                </style>
+            </head>
+            <body>
+                <h3>Grade ${grade}</h3>
+                <p><strong>School Name:</strong> Lusigetti Primary School</p>
+                <p><strong>Year:</strong> 2025</p>
+                <p><strong>Term:</strong> 1</p>
+                ${tableContent}
+            </body>
+        </html>
+    `);
+    printWindow.document.close();
+    printWindow.print();
+}
+
+// Add event listener for Group by SNE button
+document.getElementById('groupBySNEButton').addEventListener('click', groupLearnersBySNE);
 
 </script>
 </body>
